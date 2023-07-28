@@ -2757,7 +2757,8 @@ void * ggml_cuda_host_malloc(size_t size) {
     }
 
     void * ptr = nullptr;
-    cudaError_t err = cudaMallocHost((void **) &ptr, size);
+    //cudaError_t err = cudaMallocHost((void **) &ptr, size);
+    cudaError_t err = cudaMallocManaged((void **) &ptr, size);
     if (err != cudaSuccess) {
         // The allocation error can be bypassed. A null ptr will assigned out of this function.
         // This can fixed the OOM error in WSL.
