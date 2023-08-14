@@ -16,7 +16,7 @@ N_PREDICTS="${N_PREDICTS:-2048}"
 
 # Note: you can also override the generation options by specifying them on the command line:
 # For example, override the context size by doing: ./homebot --ctx_size 1024
-GEN_OPTIONS="${GEN_OPTIONS:---ctx_size 2048 --temp 0.7 --top_k 40 --top_p 0.5 --repeat_last_n 256 --batch_size 1024 --repeat_penalty 1.17647 -ngl 90}"
+GEN_OPTIONS="${GEN_OPTIONS:---ctx_size 2048 --temp 0.7 --top_k 40 --top_p 0.5 --repeat_last_n 256 --batch_size 1024 --repeat_penalty 1.17647 -ngl 60}"
 
 DATE_TIME=$(date +%H:%M)
 DATE_YEAR=$(date +%Y)
@@ -30,7 +30,7 @@ sed -e "s/\[\[USER_NAME\]\]/$USER_NAME/g" \
      $PROMPT_TEMPLATE > $PROMPT_FILE
 
 # shellcheck disable=SC2086 # Intended splitting of GEN_OPTIONS
-build/bin/main $GEN_OPTIONS \
+/usr/local/cuda/bin/cuda-gdb --args build/bin/main $GEN_OPTIONS \
   --model "$MODEL" \
   --threads "$N_THREAD" \
   --n_predict "$N_PREDICTS" \

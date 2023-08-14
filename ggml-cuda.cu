@@ -4811,7 +4811,7 @@ static void * ggml_cuda_pool_malloc(size_t size, size_t * actual_size) {
     void * ptr;
     size_t look_ahead_size = (size_t) (1.05 * size);
     look_ahead_size = 256 * ((look_ahead_size + 255)/256);
-    CUDA_CHECK(cudaMalloc((void **) &ptr, look_ahead_size));
+    CUDA_CHECK(cudaMallocManaged((void **) &ptr, look_ahead_size));
     *actual_size = look_ahead_size;
     return ptr;
 }
@@ -4904,7 +4904,6 @@ void * ggml_cuda_host_malloc(size_t size) {
     }
 
     void * ptr = nullptr;
-    //cudaError_t err = cudaMallocHost((void **) &ptr, size);
     cudaError_t err = cudaMallocManaged((void **) &ptr, size);
     if (err != cudaSuccess) {
         // The allocation error can be bypassed. A null ptr will assigned out of this function.
@@ -4919,7 +4918,7 @@ void * ggml_cuda_host_malloc(size_t size) {
 }
 
 void ggml_cuda_host_free(void * ptr) {
-    CUDA_CHECK(cudaFreeHost(ptr));
+    CUDA_CHECK(cudaFree(ptr));
 }
 
 static cudaError_t ggml_cuda_cpy_tensor_2d(
@@ -4953,8 +4952,12 @@ static cudaError_t ggml_cuda_cpy_tensor_2d(
 
     const char * x = src_ptr + i1_low*nb1 + i2*nb2 + i3*nb3;
     if (nb0 == ts && nb1 == ts*ne0/bs) {
+        //dst_ptr = (char *)x;
+        //return cudaSuccess;
         return cudaMemcpyAsync(dst_ptr, x, i1_diff*nb1, kind, stream);
     } else if (nb0 == ts) {
+        //dst_ptr = (char *)x;
+        //return cudaSuccess;
         return cudaMemcpy2DAsync(dst_ptr, ts*ne0/bs, x, nb1, ts*ne0/bs, i1_diff, kind, stream);
     } else {
         for (int64_t i1 = 0; i1 < i1_diff; i1++) {
@@ -5113,6 +5116,7 @@ inline void ggml_cuda_op_rms_norm(
     (void) i1;
 }
 
+<<<<<<< Updated upstream
 inline void ggml_cuda_op_mul_mat_q(
     const ggml_tensor * src0, const ggml_tensor * src1, ggml_tensor * dst, char * src0_ddq_i,
     float * src0_ddf_i, float * src1_ddf_i, float * dst_ddf_i, int64_t i02, int64_t i01_low, int64_t i01_high, int i1,
@@ -5222,6 +5226,9 @@ static int64_t get_row_rounding(ggml_type type) {
 }
 
 inline void ggml_cuda_op_mul_mat_vec(
+=======
+void ggml_cuda_op_mul_mat_vec(
+>>>>>>> Stashed changes
     const ggml_tensor * src0, const ggml_tensor * src1, ggml_tensor * dst, char * src0_ddq_i,
     float * src0_ddf_i, float * src1_ddf_i, float * dst_ddf_i, int64_t i02, int64_t i01_low, int64_t i01_high, int i1,
     cudaStream_t & cudaStream_main){
@@ -5742,6 +5749,7 @@ static void ggml_cuda_op(const ggml_tensor * src0, const ggml_tensor * src1, ggm
                 }
 
                 // copy src0, src1 to device if necessary
+/*                
                 if (use_src1 && !src1_stays_on_host) {
                     if (src1->backend == GGML_BACKEND_CPU) {
                         GGML_ASSERT(!flatten_rows || nrows0 == ggml_nrows(src1));
@@ -5770,6 +5778,7 @@ static void ggml_cuda_op(const ggml_tensor * src0, const ggml_tensor * src1, ggm
                         CUDA_CHECK(ggml_cuda_cpy_tensor_2d(src0_ddq_i, src0, i03, i02/i02_divisor, i01_low, i01_high, cudaStream_main));
                     }
                 }
+*/
 
                 // convert src0 to f32 if it is necessary for the ggml_cuda_op
                 if (src0_needs_f32 && !src0_is_f32) {
@@ -5778,10 +5787,14 @@ static void ggml_cuda_op(const ggml_tensor * src0, const ggml_tensor * src1, ggm
                 }
 
                 // do the computation
+                cudaDeviceSynchronize();
                 op(src0, src1, dst, src0_ddq_i, src0_ddf_i, src1_ddf_i, dst_ddf_i, i02, i01_low, i01_high, i11, cudaStream_main);
                 CUDA_CHECK(cudaGetLastError());
+                cudaDeviceSynchronize();
 
                 // copy dst to host or other device if necessary
+/*
+
                 if (!dst_on_device) {
                     void * dst_off_device;
                     cudaMemcpyKind kind;
@@ -5800,15 +5813,25 @@ static void ggml_cuda_op(const ggml_tensor * src0, const ggml_tensor * src1, ggm
                         // The outputs of matrix matrix multiplications can therefore NOT simply be concatenated for >1 GPU.
                         // Instead they need to be copied to the correct slice in ne0 = dst row index.
                         // If dst is a vector with ne0 == 1 then you don't have to do this but it still produces correct results.
+<<<<<<< Updated upstream
                         float * dhf_dst_i = (float *) ((char *) dst_off_device + i01_low*sizeof(float) + i02*nb2 + i03*nb3);
                         CUDA_CHECK(cudaMemcpy2DAsync(dhf_dst_i, ne0*sizeof(float), dst_ddf_i, i01_diff*sizeof(float),
                                                      i01_diff*sizeof(float), ne1, kind, cudaStream_main));
+=======
+                        for (int64_t j = 0; j < ne1; ++j) {
+                            float * dhf_dst_i = (float *) ((char *) dst_off_device + (j*ne0 + i01_low)*sizeof(float) + i02*nb2 + i03*nb3);
+                            //dhf_dst_i = dst_ddf_i + j*i01_diff;
+                            CUDA_CHECK(cudaMemcpyAsync(dhf_dst_i, dst_ddf_i + j*i01_diff, i01_diff*sizeof(float), kind, cudaStream_main));
+                        }
+>>>>>>> Stashed changes
                     } else {
                         float * dhf_dst_i = (float *) ((char *) dst_off_device + i02*nb2 + i03*nb3);
+                        //dhf_dst_i = dst_ddf_i;
                         CUDA_CHECK(cudaMemcpyAsync(dhf_dst_i, dst_ddf_i, dst_stride*sizeof(float), kind, cudaStream_main));
                     }
                 }
 
+*/
                 // signify to main device that other device is done
                 if (split && g_device_count > 1 && id != g_main_device) {
                     CUDA_CHECK(cudaEventRecord(src0_extra->events[id], cudaStream_main));
@@ -5849,10 +5872,10 @@ static void ggml_cuda_op(const ggml_tensor * src0, const ggml_tensor * src1, ggm
         }
     }
 
-    if (dst->backend == GGML_BACKEND_CPU) {
+    //if (dst->backend == GGML_BACKEND_CPU) {
         CUDA_CHECK(cudaSetDevice(g_main_device));
         CUDA_CHECK(cudaDeviceSynchronize());
-    }
+    //}
 }
 
 void ggml_cuda_add(const ggml_tensor * src0, const ggml_tensor * src1, ggml_tensor * dst) {
@@ -6140,7 +6163,7 @@ void ggml_cuda_transform_tensor(void * data, struct ggml_tensor * tensor) {
         }
 
         char * buf;
-        CUDA_CHECK(cudaMalloc(&buf, size));
+        CUDA_CHECK(cudaMallocManaged(&buf, size));
         char * buf_host = (char*)data + offset_split;
 
         // set padding to 0 to avoid possible NaN values
@@ -6148,7 +6171,7 @@ void ggml_cuda_transform_tensor(void * data, struct ggml_tensor * tensor) {
             CUDA_CHECK(cudaMemset(buf + original_size, 0, size - original_size));
         }
 
-
+        //buf = buf_host;
         CUDA_CHECK(cudaMemcpy(buf, buf_host, original_size, cudaMemcpyHostToDevice));
 
         extra->data_device[id] = buf;
@@ -6246,7 +6269,7 @@ void ggml_cuda_assign_buffers_impl(struct ggml_tensor * tensor, bool scratch, bo
 
         char * data = (char *) g_scratch_buffer;
         if (data == nullptr) {
-            CUDA_CHECK(cudaMalloc(&data, g_scratch_size));
+            CUDA_CHECK(cudaMallocManaged(&data, g_scratch_size));
             g_scratch_buffer = data;
         }
         extra = ggml_cuda_alloc_temp_tensor_extra();
@@ -6257,7 +6280,7 @@ void ggml_cuda_assign_buffers_impl(struct ggml_tensor * tensor, bool scratch, bo
         GGML_ASSERT(g_scratch_offset <= g_scratch_size);
     } else { // allocate new buffers outside of scratch
         void * data;
-        CUDA_CHECK(cudaMalloc(&data, size));
+        CUDA_CHECK(cudaMallocManaged(&data, size));
         CUDA_CHECK(cudaMemset(data, 0, size));
         extra = new ggml_tensor_extra_gpu;
         memset(extra, 0, sizeof(*extra));
